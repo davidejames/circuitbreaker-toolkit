@@ -27,9 +27,9 @@ classifiers = [
 dependencies = []
 
 [project.urls]
-Documentation = "https://github.com/David E. James/circuitbreaker-toolkit#readme"
-Issues = "https://github.com/David E. James/circuitbreaker-toolkit/issues"
-Source = "https://github.com/David E. James/circuitbreaker-toolkit"
+Documentation = "https://github.com/davidejames/circuitbreaker-toolkit#readme"
+Issues = "https://github.com/davidejames/circuitbreaker-toolkit/issues"
+Source = "https://github.com/davidejames/circuitbreaker-toolkit"
 
 [tool.hatch.version]
 path = "src/circuitbreaker_toolkit/__about__.py"
