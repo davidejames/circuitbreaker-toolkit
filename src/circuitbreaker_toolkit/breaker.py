@@ -94,7 +94,7 @@ class CircuitBreaker:
         try:
             forgive_rate = float(_forgiveness)
         except ValueError:
-            raise ValueError(f'forgiveness must be callable or float')
+            raise ValueError(f'forgiveness must be callable or float castable')
 
         def forgiveness_f(elapsed):
             return elapsed * forgive_rate
