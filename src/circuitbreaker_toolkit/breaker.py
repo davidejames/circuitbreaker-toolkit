@@ -5,6 +5,12 @@
 from enum import Enum
 
 from .defaults import Defaults
+from .exceptions import (
+    FooException,
+    CircuitBreakerOpen,
+    CircuitBreakerSequenceError,
+)
+
 
 #──────────────────────────────────────────────────────────────────────────────#
 # Factory                                                             §factory #
@@ -55,17 +61,18 @@ class CircuitBreaker:
         self._time_f = time_func or Defaults.TIME_FUNC
 
         # internal state vars
-        self._in_process  = False
-        self._state       = State.CLOSED
-        self._opened_time = None
-        self._failures    = 0.0
+        self._in_process    = False
+        self._result_marked = False
+        self._state         = State.CLOSED
+        self._opened_time   = None
+        self._failures      = 0.0
 
         self._failure_update_time = self._time_f()
 
     #╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌#
     def _configure_exceptions(self, exceptions):
         if exceptions is None:
-            self._exception_f = lambda: FooExceptoin
+            self._exception_f = lambda: FooException
             self._fail_on_generic = True
 
         elif callable(exceptions) and not inspect.isclass(exceptions):
@@ -102,6 +109,7 @@ class CircuitBreaker:
             raise CircuitBreakerSequenceError()
 
         self._in_process = True
+        self._result_marked = False
 
         if self._state != State.OPEN:
             return
@@ -109,10 +117,11 @@ class CircuitBreaker:
         timestamp = self._time_f()
         elapsed   = timestamp - self._opened_time
 
-        if elapsed > self._open_timeout:
-            self._state == State.HALF_CLOSED
+        if elapsed >= self._open_timeout_f():
+            self._state = State.HALF_CLOSED
 
         if self._state == State.OPEN:
+            self._in_process = False
             raise CircuitBreakerOpen()
 
     #╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌#
@@ -126,7 +135,7 @@ class CircuitBreaker:
 
         # if user didn't specify exceptions, then the only exception that
         # gets here is a 'fake' unused exception
-        assert self.fail_on_generic == False
+        assert self._fail_on_generic == False
 
         timestamp = self._time_f()
         self._mark_failure(timestamp)
@@ -138,7 +147,7 @@ class CircuitBreaker:
 
         timestamp = self._time_f()
 
-        if self.fail_on_generic:
+        if self._fail_on_generic:
             self._mark_failure(timestamp)
 
         else:
@@ -154,7 +163,7 @@ class CircuitBreaker:
 
     #╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌#
     def end(self):
-        if not self._in_process:
+        if not self._in_process or not self._result_marked:
             raise CircuitBreakerSequenceError()
 
         self._in_process = False
@@ -166,14 +175,16 @@ class CircuitBreaker:
         if self._state == State.HALF_CLOSED:
             self._state    = State.CLOSED
             self._failures = 0
+        self._result_marked = True
 
     #╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌#
     def _mark_failure(self, timestamp):
         self._failures += 1.0
         if self._state == State.HALF_CLOSED or \
-           self._failures > self.open_threshold:
+           self._failures > self._open_threshold_f():
             self._state      = State.OPEN
-            self.opened_time = timestamp
+            self._opened_time = timestamp
+        self._result_marked = True
 
     #╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌╌#
     def _forgive(self, timestamp):
